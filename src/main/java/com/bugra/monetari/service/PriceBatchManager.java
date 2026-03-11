@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
 public class PriceBatchManager {
@@ -37,45 +36,50 @@ public class PriceBatchManager {
     public CompletableFuture<PriceResponse> enqueue(String coinId) {
         CompletableFuture<PriceResponse> future = new CompletableFuture<>();
 
-        BatchState batchState = batches.computeIfAbsent(coinId, key -> {
-            log.info("Creating new batch for coin={}", key);
+        while (true) {
+            BatchState batchState = batches.computeIfAbsent(coinId, key -> {
+                log.info("Creating new batch for coin={}", key);
 
-            BatchState newBatch = new BatchState();
+                BatchState newBatch = new BatchState();
 
-            ScheduledFuture<?> scheduledFuture = scheduler.schedule(
-                    () -> flushBatch(key),
-                    WAIT_SECONDS,
-                    TimeUnit.SECONDS
-            );
+                ScheduledFuture<?> scheduledFuture = scheduler.schedule(
+                        () -> flushBatch(key),
+                        WAIT_SECONDS,
+                        TimeUnit.SECONDS
+                );
 
-            log.info("Scheduled timeout flush for coin={} after {} seconds", key, WAIT_SECONDS);
+                newBatch.setScheduledTask(scheduledFuture);
 
-            newBatch.setScheduledTask(scheduledFuture);
-            return newBatch;
-        });
+                log.info("Scheduled timeout flush for coin={} after {} seconds", key, WAIT_SECONDS);
+                return newBatch;
+            });
 
-        batchState.getWaitingRequests().add(future);
+            synchronized (batchState) {
+                if (batchState.getFlushed().get()) {
+                    log.warn("Batch already flushed for coin={}, retrying enqueue with a new batch", coinId);
+                    continue;
+                }
 
-        log.info("Request queued for coin={}, currentSize={}, thread={}",
-                coinId,
-                batchState.getWaitingRequests().size(),
-                Thread.currentThread().getName());
+                batchState.getWaitingRequests().add(future);
 
-        if (batchState.getWaitingRequests().size() >= THRESHOLD) {
-            log.info("Threshold reached for coin={}, size={}",
-                    coinId,
-                    batchState.getWaitingRequests().size());
-            flushBatch(coinId);
+                log.info("Request queued for coin={}, currentSize={}, thread={}",
+                        coinId,
+                        batchState.getWaitingRequests().size(),
+                        Thread.currentThread().getName());
+
+                if (batchState.getWaitingRequests().size() >= THRESHOLD) {
+                    log.info("Threshold reached for coin={}, size={}",
+                            coinId,
+                            batchState.getWaitingRequests().size());
+                    flushBatchInternal(coinId, batchState);
+                }
+            }
+
+            return future;
         }
-
-        return future;
     }
 
     private void flushBatch(String coinId) {
-        log.info("flushBatch called for coin={}, thread={}",
-                coinId,
-                Thread.currentThread().getName());
-
         BatchState batchState = batches.get(coinId);
 
         if (batchState == null) {
@@ -83,8 +87,16 @@ public class PriceBatchManager {
             return;
         }
 
-        AtomicBoolean flushed = batchState.getFlushed();
-        if (!flushed.compareAndSet(false, true)) {
+        synchronized (batchState) {
+            log.info("flushBatch called for coin={}, thread={}",
+                    coinId,
+                    Thread.currentThread().getName());
+            flushBatchInternal(coinId, batchState);
+        }
+    }
+
+    private void flushBatchInternal(String coinId, BatchState batchState) {
+        if (!batchState.getFlushed().compareAndSet(false, true)) {
             log.warn("Flush already executed for coin={}", coinId);
             return;
         }
@@ -95,38 +107,39 @@ public class PriceBatchManager {
             log.info("Cancelled scheduled task for coin={}", coinId);
         }
 
+        batches.remove(coinId);
+        log.info("Removed batch from map for coin={}", coinId);
+
         try {
             log.info("Calling external API for coin={}", coinId);
 
-            PriceResponse priceResponse = coinGeckoClient.fetchCurrentPrice(coinId, DEFAULT_CURRENCY);
+            PriceResponse response = coinGeckoClient.fetchCurrentPrice(coinId, DEFAULT_CURRENCY);
 
-            PriceRecord priceRecord = PriceRecord.builder()
-                    .coinId(priceResponse.getCoinId())
-                    .price(priceResponse.getPrice())
-                    .currency(priceResponse.getCurrency())
-                    .fetchedAt(priceResponse.getFetchedAt())
+            PriceRecord record = PriceRecord.builder()
+                    .coinId(response.getCoinId())
+                    .price(response.getPrice())
+                    .currency(response.getCurrency())
+                    .fetchedAt(response.getFetchedAt())
                     .build();
 
-            priceRecordRepository.save(priceRecord);
+            priceRecordRepository.save(record);
 
             log.info("Saved price record for coin={}, waitingRequestCount={}",
                     coinId,
                     batchState.getWaitingRequests().size());
 
-            log.info("Completing all waiting requests for coin={}", coinId);
-
-            for (CompletableFuture<PriceResponse> waitingRequest : batchState.getWaitingRequests()) {
-                waitingRequest.complete(priceResponse);
+            for (CompletableFuture<PriceResponse> req : batchState.getWaitingRequests()) {
+                req.complete(response);
             }
+
+            log.info("Completed all waiting requests for coin={}", coinId);
+
         } catch (Exception ex) {
             log.error("Error while flushing batch for coin={}", coinId, ex);
 
-            for (CompletableFuture<PriceResponse> waitingRequest : batchState.getWaitingRequests()) {
-                waitingRequest.completeExceptionally(ex);
+            for (CompletableFuture<PriceResponse> req : batchState.getWaitingRequests()) {
+                req.completeExceptionally(ex);
             }
-        } finally {
-            log.info("Removing batch for coin={}", coinId);
-            batches.remove(coinId);
         }
     }
 

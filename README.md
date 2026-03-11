@@ -6,63 +6,50 @@ The system is designed to efficiently handle high traffic by batching concurrent
 
 The application is built using Java Spring Boot, PostgreSQL, and Docker.
 
+--------------------------------------------------
+
 FEATURES
 
-Fetch cryptocurrency price from the CoinGecko API
+- Fetch cryptocurrency price from the CoinGecko API
+- Batch multiple requests for the same coin
+- Threshold-based batching
+- Timeout-based batching (5 seconds)
+- Store fetched prices in PostgreSQL
+- Retrieve price history
+- API key based authentication
+- Global exception handling
+- Structured JSON logging
+- Unit testing
+- Integration testing
+- Dockerized deployment
+- Swagger API documentation
 
-Batch multiple requests for the same coin
-
-Threshold-based batching
-
-Timeout-based batching (5 seconds)
-
-Store fetched prices in PostgreSQL
-
-Retrieve price history
-
-API key based authentication
-
-Global exception handling
-
-Structured JSON logging
-
-Unit testing
-
-Integration testing
-
-Dockerized deployment
-
-Swagger API documentation
+--------------------------------------------------
 
 ARCHITECTURE OVERVIEW
 
 The application follows a layered architecture:
 
-Controller → Service → Batch Manager → External API Client → Database
+Controller -> Service -> Batch Manager -> External API Client -> Database
+
+--------------------------------------------------
 
 REQUEST FLOW
 
-Client sends request to fetch coin price
-
-Request reaches PriceController
-
-PriceService forwards the request to PriceBatchManager
-
-Batch manager groups requests for the same coin
-
-Batch is triggered when:
-
-3 requests arrive
-
-5 seconds pass
-
-A single request is sent to CoinGecko API
-
-The fetched price is stored in PostgreSQL
-
-All waiting requests receive the same response
+1. Client sends request to fetch coin price
+2. Request reaches PriceController
+3. PriceService forwards the request to PriceBatchManager
+4. Batch manager groups requests for the same coin
+5. Batch is triggered when:
+   - 3 requests arrive
+   - 5 seconds pass
+6. A single request is sent to CoinGecko API
+7. The fetched price is stored in PostgreSQL
+8. All waiting requests receive the same response
 
 This design reduces redundant external API calls and improves system efficiency.
+
+--------------------------------------------------
 
 API ENDPOINTS
 
@@ -81,11 +68,13 @@ X-API-KEY: secret-key
 Response example:
 
 {
-"coinId": "bitcoin",
-"price": 69298,
-"currency": "usd",
-"fetchedAt": "2026-03-11T12:43:16"
+  "coinId": "bitcoin",
+  "price": 69298,
+  "currency": "usd",
+  "fetchedAt": "2026-03-11T12:43:16"
 }
+
+--------------------------------------------------
 
 GET PRICE HISTORY
 
@@ -102,13 +91,15 @@ X-API-KEY: secret-key
 Response example:
 
 [
-{
-"coinId": "bitcoin",
-"price": 69298,
-"currency": "usd",
-"fetchedAt": "2026-03-11T12:43:16"
-}
+  {
+    "coinId": "bitcoin",
+    "price": 69298,
+    "currency": "usd",
+    "fetchedAt": "2026-03-11T12:43:16"
+  }
 ]
+
+--------------------------------------------------
 
 AUTHENTICATION
 
@@ -122,12 +113,13 @@ Requests without a valid API key return:
 
 401 Unauthorized
 
+--------------------------------------------------
+
 RUNNING THE PROJECT
 
 OPTION 1 — RUN WITH DOCKER
 
 Requirements:
-
 Docker
 Docker Compose
 
@@ -136,18 +128,17 @@ Start the application:
 docker-compose up --build
 
 Services started:
-
 Spring Boot API
 PostgreSQL database
 
 API will be available at:
-
 http://localhost:8080
+
+--------------------------------------------------
 
 OPTION 2 — RUN LOCALLY
 
 Requirements:
-
 Java 21
 Maven
 PostgreSQL
@@ -156,11 +147,14 @@ Run the project:
 
 ./mvnw spring-boot:run
 
+--------------------------------------------------
+
 SWAGGER DOCUMENTATION
 
 Swagger UI:
-
 http://localhost:8080/swagger-ui/index.html
+
+--------------------------------------------------
 
 TESTING
 
@@ -170,11 +164,11 @@ Run tests with:
 
 Implemented tests include:
 
-Unit test for batch threshold behavior
+- Unit test for batch threshold behavior
+- Unit test for price history retrieval
+- Integration test for price history endpoint
 
-Unit test for price history retrieval
-
-Integration test for price history endpoint
+--------------------------------------------------
 
 LOGGING
 
@@ -183,11 +177,13 @@ The application uses structured JSON logging.
 Example log entry:
 
 {
-"@timestamp": "2026-03-11T13:53:21.883Z",
-"level": "INFO",
-"logger_name": "PriceBatchManager",
-"message": "Creating new batch for coin=bitcoin"
+  "@timestamp": "2026-03-11T13:53:21.883Z",
+  "level": "INFO",
+  "logger_name": "PriceBatchManager",
+  "message": "Creating new batch for coin=bitcoin"
 }
+
+--------------------------------------------------
 
 TECHNOLOGIES USED
 
@@ -200,6 +196,8 @@ Swagger (OpenAPI)
 JUnit
 Mockito
 Logstash Logback Encoder
+
+--------------------------------------------------
 
 AUTHOR
 

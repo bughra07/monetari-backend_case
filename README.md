@@ -198,6 +198,19 @@ Mockito
 Logstash Logback Encoder
 
 --------------------------------------------------
+FUTURE WORK
+The following improvements could be implemented in future versions of the system:
+
+- JWT-based authentication
+  Replace the simple API key authentication with JWT tokens for more secure and flexible authentication.
+
+- Redis caching layer
+  Add Redis to cache recent cryptocurrency prices and reduce database and external API load.
+
+- Rate limiting
+  Implement rate limiting to protect the API from abuse and excessive traffic.
+
+--------------------------------------------------
 
 AUTHOR
 

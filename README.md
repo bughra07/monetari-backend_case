@@ -199,6 +199,7 @@ Logstash Logback Encoder
 
 --------------------------------------------------
 FUTURE WORK
+
 The following improvements could be implemented in future versions of the system:
 
 - JWT-based authentication
